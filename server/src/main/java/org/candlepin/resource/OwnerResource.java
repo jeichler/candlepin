@@ -334,6 +334,21 @@ public class OwnerResource {
             throw new BadRequestException(i18n.tr(
                 "Could not create the Owner: {0}. Parent {1} does not exist.", owner, parent));
         }
+        if (StringUtils.isBlank(owner.getContentAccessModeList())) {
+            owner.setContentAccessModeList(
+                ContentAccessCertServiceAdapter.DEFAULT_CONTENT_ACCESS_MODE);
+            owner.setContentAccessMode(
+                ContentAccessCertServiceAdapter.DEFAULT_CONTENT_ACCESS_MODE);
+        }
+        if (StringUtils.isBlank(owner.getContentAccessMode())) {
+            throw new BadRequestException(
+                i18n.tr("You must assign a Content Access Mode from the mode list."));
+        }
+
+        if (!owner.isAllowedContentAccessMode(owner.getContentAccessMode())) {
+            throw new BadRequestException(
+                i18n.tr("The content access mode is not allowed for this owner."));
+        }
 
         Owner created = ownerCurator.create(owner);
         if (created == null) {
@@ -370,7 +385,7 @@ public class OwnerResource {
         }
 
         try {
-            ownerManager.cleanupAndDelete(owner, revoke);
+            ownerManager.cleanupAndDelete(owner, poolManager, revoke);
         }
         catch (PersistenceException e) {
             if (e.getCause() instanceof ConstraintViolationException) {
@@ -948,9 +963,9 @@ public class OwnerResource {
             toUpdate.setAutobindDisabled(owner.getAutobindDisabled());
         }
 
-        if (!ContentAccessCertServiceAdapter.DEFAULT_CONTENT_ACCESS_MODE.equals(owner.contentAccessMode()) &&
-            config.getBoolean(ConfigProperties.STANDALONE)) {
-
+        if (config.getBoolean(ConfigProperties.STANDALONE) &&
+            !toUpdate.getContentAccessMode().equals(owner.getContentAccessMode()) &&
+            owner.getContentAccessMode() != null) {
             throw new BadRequestException(
                 i18n.tr("The owner content access mode cannot be set directly in standalone mode."));
         }
@@ -958,7 +973,7 @@ public class OwnerResource {
         // Update the contentAccess field if the incoming value is not null.
         boolean refreshContentAccess = false;
         if (owner.getContentAccessMode() != null) {
-            if (toUpdate.isAllowedContentAccessMode(owner.contentAccessMode())) {
+            if (toUpdate.isAllowedContentAccessMode(owner.getContentAccessMode())) {
                 String before = toUpdate.getContentAccessMode();
                 String after = owner.getContentAccessMode();
 
